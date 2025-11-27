@@ -52,8 +52,10 @@ def main(place_name, place_is_poi, searchable_type, required_keywords = set(), m
     session = requests.Session()
     session.auth = (LnP.ttiplaces_username, LnP.ttiplaces_password)
 
+    property_codes = set()
+
     if place_is_poi or nearby_poi_type:
-        poi_info_df = pd.read_excel(LnP.poi_info_path, sheet_name="ACTUAL LAT_LONGS")
+        poi_info_df = pd.read_excel(LnP.poi_info_xlsx_path, sheet_name="ACTUAL LAT_LONGS")
 
     print("Test: main() starts here.\n\n") #/// Test print
 
@@ -61,8 +63,6 @@ def main(place_name, place_is_poi, searchable_type, required_keywords = set(), m
 
     ### STEP 1: Find the key for a chosen place or poi ###
     if not place_is_poi:
-        property_codes = set()
-
         # When selected_key is provided, skip searching by name as we already know what place to use
         if selected_key:
             print("Using provided place key: {}\n\n".format(selected_key)) #/// Test print
@@ -191,7 +191,6 @@ def main(place_name, place_is_poi, searchable_type, required_keywords = set(), m
             print("Found POI '{}'".format(hits_df.iloc[0]["name_primary"])) #/// Test print
             
             # Get list of TTICodes for a given place
-            property_codes = set()
             for parent_place in hits_df.iloc[0]["places"]:
                 # Perform authenticated request
                 params = {
@@ -221,7 +220,7 @@ def main(place_name, place_is_poi, searchable_type, required_keywords = set(), m
 
     ### STEP 2: Get info for each property, filtered by type and rating (if applicable) ###
     # Load in info sheet
-    cache_dir = "..\\Cache"
+    cache_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "Cache")
     os.makedirs(cache_dir, exist_ok=True)
     cache_path = os.path.join(cache_dir, "properties.parquet")
 
@@ -229,19 +228,19 @@ def main(place_name, place_is_poi, searchable_type, required_keywords = set(), m
 
     try:
         # If cache is newer than the Excel file, read the parquet cache
-        if os.path.exists(cache_path) and os.path.getmtime(cache_path) >= os.path.getmtime(LnP.property_info_path):
+        if os.path.exists(cache_path) and os.path.getmtime(cache_path) >= os.path.getmtime(LnP.property_info_xlsx_path):
             property_df = pd.read_parquet(cache_path)
         else:
             # Read only selected columns from each sheet, then cache as parquet for next runs
-            properties_a_k_df = pd.read_excel(LnP.property_info_path, sheet_name="CNTRIES A_K", engine="openpyxl", usecols=use_cols)
-            properties_l_z_df = pd.read_excel(LnP.property_info_path, sheet_name="CNTRIES L_Z", engine="openpyxl", usecols=use_cols)
+            properties_a_k_df = pd.read_excel(LnP.property_info_xlsx_path, sheet_name="CNTRIES A_K", engine="openpyxl", usecols=use_cols)
+            properties_l_z_df = pd.read_excel(LnP.property_info_xlsx_path, sheet_name="CNTRIES L_Z", engine="openpyxl", usecols=use_cols)
             property_df = pd.concat([properties_a_k_df, properties_l_z_df], ignore_index=True)
             # Write a compact, fast-to-read cache
             property_df.to_parquet(cache_path, index=False)
     except Exception:
         # Fallback: full read if selective read of cache fails
-        properties_a_k_df = pd.read_excel(LnP.property_info_path, sheet_name="CNTRIES A_K", engine="openpyxl")
-        properties_l_z_df = pd.read_excel(LnP.property_info_path, sheet_name="CNTRIES L_Z", engine="openpyxl")
+        properties_a_k_df = pd.read_excel(LnP.property_info_xlsx_path, sheet_name="CNTRIES A_K", engine="openpyxl")
+        properties_l_z_df = pd.read_excel(LnP.property_info_xlsx_path, sheet_name="CNTRIES L_Z", engine="openpyxl")
         property_df = pd.concat([properties_a_k_df, properties_l_z_df], axis=0)
     print("Property DataFrame length: {}\n".format(len(property_df.index)))
 
@@ -261,7 +260,7 @@ def main(place_name, place_is_poi, searchable_type, required_keywords = set(), m
 
     ### STEP 3: Import facts for each property, and filter as required ###
     # --- Load the CSV with FACT IDs + keywords ---
-    df = pd.read_csv(LnP.property_facts_path, header=[0,1])
+    df = pd.read_csv(LnP.property_facts_csv_path, header=[0,1])
 
     # Create a mapping of FACT ID to keywords
     fact_keywords = {}
@@ -492,7 +491,7 @@ if __name__ == "__main__":
     df, message = main(place_name, place_is_poi, searchable_type, required_keywords, min_rating, max_distance, nearby_poi_type, selected_key)
     if not message:
         # Save to CSV
-        df.to_csv("..\\Output\\{} Properties.csv".format(place_name), index=False, encoding="utf-8-sig")
+        df.to_csv(os.path.join(os.path.dirname(os.path.dirname(__file__)), "Output", "{} Properties.csv".format(place_name)), index=False, encoding="utf-8-sig")
         print("Saved '{} Properties.csv' with {} entries.\n\n".format(place_name, len(df.index)))
     else:
         print(message)
