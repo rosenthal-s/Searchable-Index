@@ -52,8 +52,6 @@ def main(place_name, place_is_poi, searchable_type, required_keywords = set(), m
     session = requests.Session()
     session.auth = (LnP.ttiplaces_username, LnP.ttiplaces_password)
 
-    property_codes = set()
-
     if place_is_poi or nearby_poi_type:
         poi_info_df = pd.read_excel(LnP.poi_info_xlsx_path, sheet_name="ACTUAL LAT_LONGS")
 
@@ -63,6 +61,8 @@ def main(place_name, place_is_poi, searchable_type, required_keywords = set(), m
 
     ### STEP 1: Find the key for a chosen place or poi ###
     if not place_is_poi:
+        property_codes = set()
+
         # When selected_key is provided, skip searching by name as we already know what place to use
         if selected_key:
             print("Using provided place key: {}\n\n".format(selected_key)) #/// Test print
@@ -184,6 +184,7 @@ def main(place_name, place_is_poi, searchable_type, required_keywords = set(), m
         if hits_df.empty:
             hits_df = df[df["name_primary"].str.contains(place_name, case=False)]
 
+        property_codes = set()
         if not hits_df.empty:
             poi_id = float(hits_df.iloc[0]["id"])
             poi_longitude = float(hits_df.iloc[0]["lon"])
@@ -211,8 +212,8 @@ def main(place_name, place_is_poi, searchable_type, required_keywords = set(), m
             print(property_codes)
             print("\n")
 
-    if len(property_codes) == 0:
-        return None, "POI not found."
+        if len(property_codes) == 0:
+            return None, "POI not found."
     
     session.close()
 
