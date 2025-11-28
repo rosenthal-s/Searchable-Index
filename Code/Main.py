@@ -13,17 +13,15 @@ import Logins_and_Paths as LnP
 
 def search_hits(place_name):
     """
-    Return a DataFrame of matching places or POIs for the given name.
-    For places this returns the API /places/ results (with 'key' and 'tticodes').
-    For POIs this returns the API /pois/ results (with 'id', 'name_primary', 'lat', 'lon', 'places').
+    Return a DataFrame of matching places or POIs for the given name from the API /places/.
     """
     session = requests.Session()
     session.auth = (LnP.ttiplaces_username, LnP.ttiplaces_password)
 
     try:
-        # Page through /places/ until a match is found.
+        # Page through /places/ to find relevant matches.
         params = {
-            "showcolumns": "name_primary,state,country_code,tticodes",
+            "showcolumns": "name_primary,state,country_code",
             "format": "json",
         }
         r = session.get(LnP.places_url, params=params)
@@ -35,7 +33,7 @@ def search_hits(place_name):
             return None, "No data found."
 
         df = pd.DataFrame(data.values())
-        # First, check for exact match, then partial match if none found
+        # First, check for exact matches, then partial matches if none found
         hits_df = df[df["name_primary"].str.lower() == place_name.lower()]
         if hits_df.empty:
             hits_df = df[df["name_primary"].str.contains(place_name, case=False)]
@@ -277,7 +275,6 @@ def main(place_name, place_is_poi, searchable_type, required_keywords = set(), m
     
     # --- Get the fact IDs from the XML ---
     # Cache facts locally and fetch missing GIATA IDs in parallel to speed up repeated runs
-    os.makedirs(cache_dir, exist_ok=True)
     facts_cache_path = os.path.join(cache_dir, "giata_facts.parquet")
     if os.path.exists(facts_cache_path):
         facts_cache_df = pd.read_parquet(facts_cache_path)
