@@ -13,7 +13,7 @@ import Logins_and_Paths as LnP
 
 def search_hits(place_name):
     """
-    Return a DataFrame of matching places or POIs for the given name from the API /places/.
+    Return a DataFrame of matching places for the given name from the API /places/.
     """
     session = requests.Session()
     session.auth = (LnP.ttiplaces_username, LnP.ttiplaces_password)
