@@ -21,15 +21,15 @@ if st.session_state.get("last_place_name") != place_name or place_is_poi:
     st.session_state["last_place_name"] = place_name
 
 type_options = [
-    "APARTHOTEL", "APARTMENTS", "B &B", "CLUB RESORT", "COUNTRYSIDE HOTEL", "GUEST HOUSE",
-    "HOLIDAY COMPLEX", "HOSTEL", "HOTEL", "RANCH", "RESORT", "STUDIOS", "VILLA"
+    "APARTHOTEL", "APARTMENTS", "B &B", "CABINS", "CLUB RESORT", "COUNTRYSIDE HOTEL", "GUEST HOUSE", "HACIENDA",
+    "HOLIDAY COMPLEX", "HOLIDAY RENTAL", "HOSTEL", "HOTEL", "RANCH", "RESORT", "STUDIOS", "VILLA"
 ]
 type_default_index = type_options.index("HOTEL") if "HOTEL" in type_options else 0
 searchable_type = st.selectbox("Searchable type", type_options, index=type_default_index)
 
 keywords_options = [
-    "ACCESSIBILITY","ADULTS","ALLINCL","BEACH","BOUTIQUE","FAMILY","GOLF",
-    "GYM","KIDS","NLIFE","POOL","SKI CLUB","SPA","TENNIS","WSPORT"
+    "ACCESSIBILITY","ADULTS","ALLINCL","BEACH","BOUTIQUE","BUSINESSHOTEL","CARPARK",
+    "FAMILY","GOLF","GYM","KIDS","NLIFE","POOL","SKI CLUB","SPA","TENNIS","WSPORT"
 ]
 selected_keywords = st.multiselect("Required keywords (pick any)", options=keywords_options)
 required_keywords = {k.strip().upper() for k in selected_keywords}
