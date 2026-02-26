@@ -148,8 +148,8 @@ def main(location_name, location_is_poi, searchable_type, required_keywords = se
                 return None, message
 
             # Get TTICodes
-            for code in place_data[selected_key].get("tticodes", []):
-                property_codes.add(int(code))
+            for property_code in place_data[selected_key].get("tticodes", []):
+                property_codes.add(int(property_code))
         # Otherwise, page through /places/ until a match is found.
         else:
             place_params = {
@@ -160,16 +160,16 @@ def main(location_name, location_is_poi, searchable_type, required_keywords = se
             if not place_data:
                 return None, message
 
-            df = pd.DataFrame(place_data.values())
+            place_df = pd.DataFrame(place_data.values())
             # First, check for exact match, then partial match if none found
-            hits_df = df[df["name_primary"].str.lower() == location_name.lower()]
+            hits_df = place_df[place_df["name_primary"].str.lower() == location_name.lower()]
             if hits_df.empty:
-                hits_df = df[df["name_primary"].str.contains(location_name, case=False, regex=False)]
+                hits_df = place_df[place_df["name_primary"].str.contains(location_name, case=False, regex=False)]
 
             if not hits_df.empty:
 #                 print("Found place '{}'".format(hits_df.iloc[0]["name_primary"])) #/// Test print
-                for tti_code in hits_df.iloc[0]["tticodes"]: #/// Should I look beyond the first entry?
-                    property_codes.add(int(tti_code))
+                for property_code in hits_df.iloc[0]["tticodes"]: #/// Should I look beyond the first entry?
+                    property_codes.add(int(property_code))
 
             selected_key = hits_df.iloc[0]["key"] if not hits_df.empty else None
 
@@ -211,8 +211,8 @@ def main(location_name, location_is_poi, searchable_type, required_keywords = se
 #                 #/// Test print of all found POIs
 #                 for _, row in poi_hits_df.iterrows():
 #                     poi_id = int(row["id"])
-#                     poi_longitude = float(row["lon"])
 #                     poi_latitude = float(row["lat"])
+#                     poi_longitude = float(row["lon"])
 #                     print("Found POI '{}' (ID: {}) at lat {}, lon {}".format(row["name_primary"], poi_id, poi_latitude, poi_longitude))
 #                 print("\n")
                 
@@ -233,8 +233,8 @@ def main(location_name, location_is_poi, searchable_type, required_keywords = se
             poi_data = raw_poi_data[0]
 
             poi_id = poi_data["id"]
-            poi_longitude = float(poi_data["lon"])
             poi_latitude = float(poi_data["lat"])
+            poi_longitude = float(poi_data["lon"])
 
             # Get TTICodes
             for parent_place in poi_data["places"]:
@@ -251,8 +251,8 @@ def main(location_name, location_is_poi, searchable_type, required_keywords = se
                 else:
                     parent_place_data = raw_place_data[parent_place]
                     # Get TTICodes
-                    for code in parent_place_data.get("tticodes", []):
-                        property_codes.add(int(code))
+                    for property_code in parent_place_data.get("tticodes", []):
+                        property_codes.add(int(property_code))
         # Otherwise, page through /pois/ until a match is found.
         else:
             poi_params = {
@@ -263,16 +263,16 @@ def main(location_name, location_is_poi, searchable_type, required_keywords = se
             if not poi_data:
                 return None, message
 
-            df = pd.DataFrame(poi_data)
+            poi_df = pd.DataFrame(poi_data)
             # First, check for exact match, then partial match if none found
-            hits_df = df[df["name_primary"].str.lower() == location_name.lower()]
+            hits_df = poi_df[poi_df["name_primary"].str.lower() == location_name.lower()]
             if hits_df.empty:
-                hits_df = df[df["name_primary"].str.contains(location_name, case=False, regex=False)]
+                hits_df = poi_df[poi_df["name_primary"].str.contains(location_name, case=False, regex=False)]
 
             if not hits_df.empty:
                 poi_id = float(hits_df.iloc[0]["id"])
-                poi_longitude = float(hits_df.iloc[0]["lon"])
                 poi_latitude = float(hits_df.iloc[0]["lat"])
+                poi_longitude = float(hits_df.iloc[0]["lon"])
 #                 print("Found POI '{}'".format(hits_df.iloc[0]["name_primary"])) #/// Test print
                 
                 # Get list of TTICodes for a given place
@@ -290,8 +290,8 @@ def main(location_name, location_is_poi, searchable_type, required_keywords = se
                     else:
                         parent_place_data = raw_place_data[parent_place]
                         # Get TTICodes
-                        for code in parent_place_data.get("tticodes", []):
-                            property_codes.add(int(code))
+                        for property_code in parent_place_data.get("tticodes", []):
+                            property_codes.add(int(property_code))
 
         if len(property_codes) == 0:
             return None, "POI not found."
@@ -343,19 +343,19 @@ def main(location_name, location_is_poi, searchable_type, required_keywords = se
 
     ### STEP 3: Import facts for each property, and filter as required ###
     # --- Load the CSV with FACT IDs + keywords ---
-    df = pd.read_csv(LnP.property_facts_csv_path, header=[0,1])
+    fact_df = pd.read_csv(LnP.property_facts_csv_path, header=[0,1])
 
     # Create a mapping of FACT ID to keywords
     fact_keywords = {}
 
-    for _, row in df.iterrows():
+    for _, row in fact_df.iterrows():
         if not math.isnan(row["FACT ID"].iloc[0]):
-            fid = str(int(row["FACT ID"].iloc[0])).strip()   # Normalize FACT ID to string
+            fact_id = str(int(row["FACT ID"].iloc[0])).strip()   # Normalize FACT ID to string
             keywords = {
-                col[1] for col in df.columns[1:]   # Skip "FACT ID" col
+                col[1] for col in fact_df.columns[1:]   # Skip "FACT ID" col
                 if str(row[col]).lower() == "x"
             }
-            fact_keywords[fid] = keywords
+            fact_keywords[fact_id] = keywords
     
     # --- Get the fact IDs from the XML ---
     # Cache facts locally and fetch missing GIATA IDs in parallel to speed up repeated runs
@@ -375,7 +375,7 @@ def main(location_name, location_is_poi, searchable_type, required_keywords = se
     retries = Retry(total=3, backoff_factor=0.5, status_forcelist=(429, 500, 502, 503, 504))
     session_f.mount("https://", HTTPAdapter(max_retries=retries))
 
-    def fetch_giata(gid):
+    def fetch_giata_fact_ids(gid):
         try:
             url = LnP.get_factsheet_url(gid)
             resp = session_f.get(url, auth=(LnP.giata_username, LnP.giata_password), timeout=15)
@@ -395,7 +395,7 @@ def main(location_name, location_is_poi, searchable_type, required_keywords = se
     if ids_to_fetch:
         max_workers = min(12, max(2, len(ids_to_fetch)))
         with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as exe:
-            futures = {exe.submit(fetch_giata, gid): gid for gid in ids_to_fetch}
+            futures = {exe.submit(fetch_giata_fact_ids, gid): gid for gid in ids_to_fetch}
             for fut in concurrent.futures.as_completed(futures):
                 gid, keywords = fut.result()
                 facts_cache[gid] = keywords
@@ -431,11 +431,11 @@ def main(location_name, location_is_poi, searchable_type, required_keywords = se
             # Convert decimal degrees to radians
             lat1, lon1, lat2, lon2 = map(math.radians, [lat1, lon1, lat2, lon2])
             # Haversine formula
-            dlat = lat2 - lat1
-            dlon = lon2 - lon1
-            a = math.sin(dlat/2)**2 + math.cos(lat1) * math.cos(lat2) * math.sin(dlon/2)**2
+            lat_diff = lat2 - lat1
+            lon_diff = lon2 - lon1
+            a = math.sin(lat_diff/2)**2 + math.cos(lat1) * math.cos(lat2) * math.sin(lon_diff/2)**2
             c = 2 * math.asin(math.sqrt(a))
-            r = 6371  # Radius of earth in kilometers. Use 3956 for miles
+            r = 6371  # Radius of the Earth in kilometers. Use 3959 for miles
             return c * r
 
         # Get more accurate lat/long from provided spreadsheet
