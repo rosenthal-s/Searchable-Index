@@ -11,107 +11,165 @@ import Logins_and_Paths as LnP
 
 
 
-def search_hits(place_name):
+def get_property_data(url, params, session, location_is_poi):
+    try:
+        # Perform authenticated request
+        response = session.get(url, params=params)
+        if not response.ok:
+            return None, f"Error fetching data: {response.status_code} {response.text}"
+        
+        # Place pages are formatted with correct JSON, but POI pages return with some messed up formatting so need to be parsed differently
+        if not location_is_poi:
+            data = response.json()
+        else:
+            data = json.loads("[" + response.text.strip()[1:-3] + "\n]")
+
+        if not data:
+            return None, "No data found."
+        else:
+            return data, ""
+    except Exception as e:
+        return None, repr(e)
+
+
+
+def search_hits(location_name, is_place, is_poi):
     """
-    Return a DataFrame of matching places or POIs for the given name.
+    Return a DataFrame of matching locations for the given name.
     For places this returns the API /places/ results (with name, state and country).
     For POIs this returns the API /pois/ results (with name and country).
     """
     session = requests.Session()
     session.auth = (LnP.ttiplaces_username, LnP.ttiplaces_password)
 
+    print("\n\n\nTEST PRINT: search_hits() starts here.\n") #/// Test print
+
     try:
+        place_hits_df = None
+        poi_hits_df   = None
+        place_inexact = False
+        poi_inexact   = False
+
         # Page through /places/ to find relevant matches.
-        params = {
-            "showcolumns": "name_primary,state,country_code",
-            "format": "json",
-        }
-        r = session.get(LnP.places_url, params=params)
-        if not r.ok:
-            return None, "Error:", r.status_code, r.text
+        if is_place:
+            place_params = {
+                "showcolumns": "name_primary,state,country_code",
+                "format": "json",
+            }
+            place_data, error = get_property_data(LnP.places_url, place_params, session, False)
+            if error:
+                return place_data, f"Error getting place data: {error}"
 
-        data = r.json()
-        if not data:
-            return None, "No data found."
+            place_df = pd.DataFrame(place_data.values())
+            # First, check for exact matches, then partial matches if none found
+            place_hits_df = place_df[place_df["name_primary"].str.lower() == location_name.lower()].copy()
+            if place_hits_df.empty:
+                place_hits_df = place_df[place_df["name_primary"].str.contains(location_name, case=False, regex=False)]
+                place_inexact = True
 
-        df = pd.DataFrame(data.values())
-        # First, check for exact matches, then partial matches if none found
-        hits_df = df[df["name_primary"].str.lower() == place_name.lower()]
-        if hits_df.empty:
-            hits_df = df[df["name_primary"].str.contains(place_name, case=False)]
+            place_hits_df["Type"] = "Place" # Add a column to identify these locations as places
+            
+#             print("Place hits:\n{}\n".format(place_hits_df.to_string(index=False))) ###
 
-        return hits_df
-    except Exception:
-        return pd.DataFrame()
+            if not is_poi:
+                return place_hits_df, ""
+
+
+
+        # Page through /pois/ to find relevant matches.
+        if is_poi:
+            poi_params = {
+                "showcolumns": "name_primary,country_code",
+                # "format": "json", #/// Can't use JSON as it returns an object per line, not a list
+            }
+            poi_data, error = get_property_data(LnP.pois_url, poi_params, session, True)
+            if error:
+                return poi_data, f"Error getting POI data: {error}"
+
+            poi_df = pd.DataFrame(poi_data)
+            # First, check for exact matches, then partial matches if none found
+            poi_hits_df = poi_df[poi_df["name_primary"].str.lower() == location_name.lower()]
+            if poi_hits_df.empty and (not is_place or place_inexact): # Only search for partial matches in POIs if we didn't find an exact match in places, to avoid overwhelming with irrelevant POI hits
+                poi_hits_df = poi_df[poi_df["name_primary"].str.contains(location_name, case=False, regex=False)]
+                poi_inexact = True
+
+            poi_hits_df = poi_hits_df.rename(columns={"id": "key"}) # Align with place_hits_df for easier concatenation later
+            poi_hits_df["Type"] = "POI" # Add a column to identify these locations as POIs
+
+#             print("POI hits:\n{}\n".format(poi_hits_df.to_string(index=False))) ###
+
+            if not is_place:
+                return poi_hits_df, ""
+
+
+        
+#         print("Place_inexact: {}, POI_inexact: {}\n".format(place_inexact, poi_inexact)) ###
+        if place_inexact and not poi_inexact: # Only inexact matches found for places, but exact matches found for POIs. Return only POI hits
+            return poi_hits_df, ""
+        else:
+            hits_df = pd.concat([place_hits_df, poi_hits_df], axis=0, ignore_index=True)
+            hits_df.fillna("", inplace=True) # Replace NaNs (for non-existent POI states) with empty strings for cleaner display
+#             print("Concatenated hits:\n{}\n".format(hits_df.to_string(index=False))) ###
+            return hits_df, ""
+    except Exception as e:
+        return pd.DataFrame(), repr(e)
     finally:
         session.close()
 
 
 
-def main(place_name, place_is_poi, searchable_type, required_keywords = set(), min_rating = 0, max_distance = 0, nearby_poi_type = "", selected_key = None):
+def main(location_name, location_is_poi, searchable_type, required_keywords = set(), min_rating = 0, max_distance = 0, nearby_poi_type = "", selected_key = None):
     session = requests.Session()
     session.auth = (LnP.ttiplaces_username, LnP.ttiplaces_password)
 
-    if place_is_poi or nearby_poi_type:
+    if location_is_poi or nearby_poi_type:
         poi_info_df = pd.read_excel(LnP.poi_info_xlsx_path, sheet_name="ACTUAL LAT_LONGS")
 
     print("Test: main() starts here.\n\n") #/// Test print
 
 
 
-    ### STEP 1: Find the key for a chosen place or poi ###
-    if not place_is_poi:
-        property_codes = set()
+    ### STEP 1: Find the key for a chosen place or poi, then get a list of property codes in the area ###
+    property_codes = set()
+
+    if not location_is_poi:
 
         # When selected_key is provided, skip searching by name as we already know what place to use
         if selected_key:
             print("Using provided place key: {}\n\n".format(selected_key)) #/// Test print
-            # Get TTI Codes for the selected key
-            place_url = LnP.get_place_url(selected_key)
-            params = {
+            place_params = {
                 "showcolumns": "tticodes",
                 "format": "json"
             }
 
             # Perform authenticated request
-            response = session.get(place_url, params=params)
-            if not response.ok:
-                return None, f"Error fetching place {selected_key}: {response.status_code} {response.text}"
-
-            raw_data = response.json()
-            if not raw_data:
-                return None, "No data found."
-            place_data = raw_data[selected_key]
+            place_data, message = get_property_data(url=LnP.get_place_url(selected_key), params=place_params, session=session, location_is_poi=False)
+            if not place_data:
+                return None, message
 
             # Get TTICodes
-            for code in place_data.get("tticodes", []):
+            for code in place_data[selected_key].get("tticodes", []):
                 property_codes.add(int(code))
-            print("Property codes: {}\n\n".format(property_codes))
         # Otherwise, page through /places/ until a match is found.
         else:
-            params = {
+            place_params = {
                 "showcolumns": "name_primary,tticodes",
                 "format": "json",
             }
-            r = session.get(LnP.places_url, params=params)
-            if not r.ok:
-                return None, "Error:", r.status_code, r.text
+            place_data, message = get_property_data(url=LnP.places_url, params=place_params, session=session, location_is_poi=False)
+            if not place_data:
+                return None, message
 
-            data = r.json()
-            if not data:
-                return None, "No data found."
-
-            df = pd.DataFrame(data.values())
+            df = pd.DataFrame(place_data.values())
             # First, check for exact match, then partial match if none found
-            hits_df = df[df["name_primary"].str.lower() == place_name.lower()]
+            hits_df = df[df["name_primary"].str.lower() == location_name.lower()]
             if hits_df.empty:
-                hits_df = df[df["name_primary"].str.contains(place_name, case=False)]
+                hits_df = df[df["name_primary"].str.contains(location_name, case=False, regex=False)]
 
             if not hits_df.empty:
-                print("Found place '{}'".format(hits_df.iloc[0]["name_primary"])) #/// Test print
+#                 print("Found place '{}'".format(hits_df.iloc[0]["name_primary"])) #/// Test print
                 for tti_code in hits_df.iloc[0]["tticodes"]: #/// Should I look beyond the first entry?
                     property_codes.add(int(tti_code))
-                print("Property codes: {}\n\n".format(property_codes))
 
             selected_key = hits_df.iloc[0]["key"] if not hits_df.empty else None
 
@@ -120,22 +178,18 @@ def main(place_name, place_is_poi, searchable_type, required_keywords = set(), m
         
         # Now search for POIs of the given type within this place, if applicable
         if nearby_poi_type:
-            print("Searching for nearby POIs of type '{}'...".format(nearby_poi_type)) #/// Test print
-            params = {
+#             print("Searching for nearby POIs of type '{}'...".format(nearby_poi_type)) #/// Test print
+            poi_params = {
                 "showcolumns": "id,name_primary,lat,lon,places",
                 # "format": "json", #/// Can't use JSON as it returns an object per line, not a list
             }
-            r = session.get(LnP.pois_url, params=params)
+            poi_data, message = get_property_data(url=LnP.pois_url, params=poi_params, session=session, location_is_poi=True)
+            if not poi_data:
+                if message == "No data found.":
+                    return None, "No nearby POIs found within place '{}'.".format(location_name)
+                return None, message
 
-            if not r.ok:
-                return None, "Error:", r.status_code, r.text
-
-            # data = r.json()
-            data = json.loads("[" + r.text.strip()[1:-3] + "\n]")
-            if not data:
-                return None, "No data found."
-
-            poi_df = pd.DataFrame(data)
+            poi_df = pd.DataFrame(poi_data)
             # Ensure POI id types align, merge local POI metadata (has 'POIS ID' and 'POIS Type')
             poi_df["id"] = poi_df["id"].astype(int)
             poi_merged_df = poi_df.merge(
@@ -152,68 +206,96 @@ def main(place_name, place_is_poi, searchable_type, required_keywords = set(), m
             ]
 
             if poi_hits_df.empty:
-                return None, "No nearby POIs of type '{}' found within place '{}'.".format(nearby_poi_type, place_name)
-            else:
-                #/// Test print of all found POIs
-                for _, row in poi_hits_df.iterrows():
-                    poi_id = int(row["id"])
-                    poi_longitude = float(row["lon"])
-                    poi_latitude = float(row["lat"])
-                    print("Found POI '{}' (ID: {}) at lat {}, lon {}".format(row["name_primary"], poi_id, poi_latitude, poi_longitude))
-                print("\n")
+                return None, "No nearby POIs of type '{}' found within place '{}'.".format(nearby_poi_type, location_name)
+#             else:
+#                 #/// Test print of all found POIs
+#                 for _, row in poi_hits_df.iterrows():
+#                     poi_id = int(row["id"])
+#                     poi_longitude = float(row["lon"])
+#                     poi_latitude = float(row["lat"])
+#                     print("Found POI '{}' (ID: {}) at lat {}, lon {}".format(row["name_primary"], poi_id, poi_latitude, poi_longitude))
+#                 print("\n")
                 
     else:
-        # Page through /pois/ until a match is found.
-        params = {
-            "showcolumns": "id,name_primary,lat,lon,places",
-            # "format": "json", #/// Can't use JSON as it returns an object per line, not a list
-        }
-        r = session.get(LnP.pois_url, params=params)
+        # When selected_key is provided, skip searching by name as we already know what poi to use
+        if selected_key:
+#             print("Using provided POI key: {}\n\n".format(selected_key)) #/// Test print
+            # Get TTI Codes for the selected key
+            poi_url = LnP.get_poi_url(selected_key)
+            poi_params = {
+                "showcolumns": "id,lat,lon,places",
+                # "format": "json", #/// Can't use JSON as it returns an object per line, not a list
+            }
 
-        if not r.ok:
-            return None, "Error:", r.status_code, r.text
+            raw_poi_data, message = get_property_data(url=poi_url, params=poi_params, session=session, location_is_poi=True)
+            if not raw_poi_data:
+                return None, message
+            poi_data = raw_poi_data[0]
 
-        # data = r.json()
-        data = json.loads("[" + r.text.strip()[1:-3] + "\n]")
-        if not data:
-            return None, "No data found."
+            poi_id = poi_data["id"]
+            poi_longitude = float(poi_data["lon"])
+            poi_latitude = float(poi_data["lat"])
 
-        df = pd.DataFrame(data)
-        # First, check for exact match, then partial match if none found
-        hits_df = df[df["name_primary"].str.lower() == place_name.lower()]
-        if hits_df.empty:
-            hits_df = df[df["name_primary"].str.contains(place_name, case=False)]
-
-        property_codes = set()
-        if not hits_df.empty:
-            poi_id = float(hits_df.iloc[0]["id"])
-            poi_longitude = float(hits_df.iloc[0]["lon"])
-            poi_latitude = float(hits_df.iloc[0]["lat"])
-            print("Found POI '{}'".format(hits_df.iloc[0]["name_primary"])) #/// Test print
-            
-            # Get list of TTICodes for a given place
-            for parent_place in hits_df.iloc[0]["places"]:
+            # Get TTICodes
+            for parent_place in poi_data["places"]:
                 # Perform authenticated request
-                params = {
+                parent_place_url = LnP.get_place_url(parent_place)
+                parent_place_params = {
                     "showcolumns": "tticodes",
                     "format": "json"
                 }
-                response = session.get(LnP.get_place_url(parent_place), params=params)
-
-                if response.ok:
-                    raw_data = response.json()
-                    place_data = raw_data[parent_place]
-
-                    # Get TTICodes
-                    for code in place_data.get("tticodes", []):
-                        property_codes.add(int(code))
+                
+                raw_place_data, message = get_property_data(url=parent_place_url, params=parent_place_params, session=session, location_is_poi=False)
+                if not raw_place_data:
+                    print(f"Error fetching place {parent_place}: {message}")
                 else:
-                    print(f"Error fetching place {parent_place}: {response.status_code} {response.text}")
-            print(property_codes)
-            print("\n")
+                    parent_place_data = raw_place_data[parent_place]
+                    # Get TTICodes
+                    for code in parent_place_data.get("tticodes", []):
+                        property_codes.add(int(code))
+        # Otherwise, page through /pois/ until a match is found.
+        else:
+            poi_params = {
+                "showcolumns": "id,name_primary,lat,lon,places",
+                # "format": "json", #/// Can't use JSON as it returns an object per line, not a list
+            }
+            poi_data, message = get_property_data(url=LnP.pois_url, params=poi_params, session=session, location_is_poi=True)
+            if not poi_data:
+                return None, message
+
+            df = pd.DataFrame(poi_data)
+            # First, check for exact match, then partial match if none found
+            hits_df = df[df["name_primary"].str.lower() == location_name.lower()]
+            if hits_df.empty:
+                hits_df = df[df["name_primary"].str.contains(location_name, case=False, regex=False)]
+
+            if not hits_df.empty:
+                poi_id = float(hits_df.iloc[0]["id"])
+                poi_longitude = float(hits_df.iloc[0]["lon"])
+                poi_latitude = float(hits_df.iloc[0]["lat"])
+#                 print("Found POI '{}'".format(hits_df.iloc[0]["name_primary"])) #/// Test print
+                
+                # Get list of TTICodes for a given place
+                for parent_place in hits_df.iloc[0]["places"]:
+                    # Perform authenticated request
+                    parent_place_url = LnP.get_place_url(parent_place)
+                    parent_place_params = {
+                        "showcolumns": "tticodes",
+                        "format": "json"
+                    }
+
+                    raw_place_data, message = get_property_data(url=parent_place_url, params=parent_place_params, session=session, location_is_poi=False)
+                    if not raw_place_data:
+                        print(f"Error fetching place {parent_place}: {message}")
+                    else:
+                        parent_place_data = raw_place_data[parent_place]
+                        # Get TTICodes
+                        for code in parent_place_data.get("tticodes", []):
+                            property_codes.add(int(code))
 
         if len(property_codes) == 0:
             return None, "POI not found."
+#         print("Property codes: {}\n\n".format(property_codes))
     
     session.close()
 
@@ -243,17 +325,17 @@ def main(place_name, place_is_poi, searchable_type, required_keywords = set(), m
         properties_a_k_df = pd.read_excel(LnP.property_info_xlsx_path, sheet_name="CNTRIES A_K", engine="openpyxl")
         properties_l_z_df = pd.read_excel(LnP.property_info_xlsx_path, sheet_name="CNTRIES L_Z", engine="openpyxl")
         property_df = pd.concat([properties_a_k_df, properties_l_z_df], axis=0)
-    print("Property DataFrame length: {}\n".format(len(property_df.index)))
+#     print("Property DataFrame length: {}\n".format(len(property_df.index)))
 
     # Get info for each property
     if "TTICODE" in property_df.columns:
-        filtered_df = property_df[
-            (property_df["Searchable Property Type"].astype(str).str.contains(searchable_type, case=False, na=False)) &
+        property_df = property_df[
+            (property_df["Searchable Property Type"].astype(str).str.contains(searchable_type, case=False, na=False, regex=False)) &
             (property_df["TTICODE"].isin(property_codes)) &
             (property_df["DEFAULT_RATING"].fillna(0) >= min_rating)
         ]
-        print(filtered_df.head())
-        print("Filtered length: {}\n\n".format(len(filtered_df.index)))
+#         print(property_df.head())
+#         print("Filtered length: {}\n\n".format(len(property_df.index)))
     else:
         return None, "Property data import failed."
     
@@ -280,12 +362,12 @@ def main(place_name, place_is_poi, searchable_type, required_keywords = set(), m
     facts_cache_path = os.path.join(cache_dir, "giata_facts.parquet")
     if os.path.exists(facts_cache_path):
         facts_cache_df = pd.read_parquet(facts_cache_path)
-        # Ensure GIATA_ID dtype matches filtered_df values
+        # Ensure GIATA_ID dtype matches property_df values
         facts_cache = {int(r["GIATA_ID"]): set(r["KEYWORDS"].split("||")) if r["KEYWORDS"] else set() for _, r in facts_cache_df.iterrows()}
     else:
         facts_cache = {}
 
-    giata_ids = [int(x) for x in filtered_df["GIATA ID"].tolist()]
+    giata_ids = [int(x) for x in property_df["GIATA ID"].tolist()]
     ids_to_fetch = [gid for gid in giata_ids if gid not in facts_cache]
 
     # Prepare session with retries
@@ -324,27 +406,27 @@ def main(place_name, place_is_poi, searchable_type, required_keywords = set(), m
 
     session_f.close()
 
-    # Build the list of matching keyword sets in the same order as filtered_df
-    all_matching_keywords = [facts_cache.get(int(gid), set()) for gid in filtered_df["GIATA ID"]]
+    # Build the list of matching keyword sets in the same order as property_df
+    all_matching_keywords = [facts_cache.get(int(gid), set()) for gid in property_df["GIATA ID"]]
 
     # Apply required_keywords filter
     mask = [required_keywords.issubset(keywords) for keywords in all_matching_keywords]
 
     # Convert sets to comma-separated, title-cased strings
-    filtered_df["KEYWORDS"] = [
+    property_df["KEYWORDS"] = [
         ", ".join(sorted([kw.title() for kw in keywords])) if keywords else ""
         for keywords in all_matching_keywords
     ]
     
     # Filter out rows that don't match all required keywords
     if len(required_keywords) > 0:
-        filtered_df = filtered_df[mask].reset_index(drop=True)
-        print("DF filtered by facts:\n{}\n\n".format(filtered_df))
+        property_df = property_df[mask].reset_index(drop=True)
+#         print("DF filtered by facts:\n{}\n\n".format(property_df))
 
 
 
     ### STEP 4: Sort by distance to POI if applicable, and filter if requested ###
-    if place_is_poi or nearby_poi_type: # Calculate distance from POI (Haversine formula)
+    if location_is_poi or nearby_poi_type: # Calculate distance from POI (Haversine formula)
         def haversine(lat1, lon1, lat2, lon2):
             # Convert decimal degrees to radians
             lat1, lon1, lat2, lon2 = map(math.radians, [lat1, lon1, lat2, lon2])
@@ -357,26 +439,26 @@ def main(place_name, place_is_poi, searchable_type, required_keywords = set(), m
             return c * r
 
         # Get more accurate lat/long from provided spreadsheet
-        if place_is_poi:
+        if location_is_poi:
             if (
                 poi_id in poi_info_df["POIS ID"].values and
                 not math.isnan(poi_info_df[poi_info_df["POIS ID"] == poi_id].iloc[0]["Actual Lat"]) and
                 not math.isnan(poi_info_df[poi_info_df["POIS ID"] == poi_id].iloc[0]["Actual Lon"])
             ):
-                print("Using verified POI lat/long.")
-                print("Old lat/long: {}, {}".format(poi_latitude, poi_longitude))
+#                 print("Using verified POI lat/long.")
+#                 print("Old lat/long: {}, {}".format(poi_latitude, poi_longitude))
                 poi_latitude = poi_info_df[poi_info_df["POIS ID"] == poi_id].iloc[0]["Actual Lat"]
                 poi_longitude = poi_info_df[poi_info_df["POIS ID"] == poi_id].iloc[0]["Actual Lon"]
-                print("New lat/long: {}, {}\n\n".format(poi_latitude, poi_longitude))
-            else:
-                print("Using POI lat/long from API.\n\n")
+#                 print("New lat/long: {}, {}\n\n".format(poi_latitude, poi_longitude))
+#             else:
+#                 print("Using POI lat/long from API.\n\n")
 
             # Apply distance calculation
-            filtered_df["DISTANCE (km)"] = filtered_df.apply(lambda row: haversine(poi_latitude, poi_longitude, row["LATITUDE"], row["LONGITUDE"]), axis=1) # formatted to 2 decimal places
-            filtered_df.sort_values(by="DISTANCE (km)", inplace=True)
+            property_df["DISTANCE (km)"] = property_df.apply(lambda row: haversine(poi_latitude, poi_longitude, row["LATITUDE"], row["LONGITUDE"]), axis=1)
+            property_df.sort_values(by="DISTANCE (km)", inplace=True)
 
-            print(filtered_df.head())
-            print("Sorted by distance to POI.\n\n")
+#             print(property_df.head())
+#             print("Sorted by distance to POI.\n\n")
         else: # nearby_poi_type
             # Get list of POIs of the given type within the selected place
             poi_info = []
@@ -400,7 +482,7 @@ def main(place_name, place_is_poi, searchable_type, required_keywords = set(), m
             closest_poi_names = []
             nearest_distances = []
 
-            for _, prop in filtered_df.iterrows():
+            for _, prop in property_df.iterrows():
                 prop_lat = prop["LATITUDE"]
                 prop_lon = prop["LONGITUDE"]
 
@@ -430,41 +512,40 @@ def main(place_name, place_is_poi, searchable_type, required_keywords = set(), m
                 closest_poi_names.append(closest_name)
                 nearest_distances.append(closest_dist)
 
-            filtered_df["NEARBY POI LIST"] = poi_lists
-            filtered_df["CLOSEST POI"] = closest_poi_names
+            property_df["NEARBY POI LIST"] = poi_lists
+            property_df["CLOSEST POI"] = closest_poi_names
             # Keep numeric distances for correct numeric sorting/filtering
-            filtered_df["DISTANCE (km)"] = nearest_distances
+            property_df["DISTANCE (km)"] = nearest_distances
 
             # Sort numerically by nearest distance, putting rows with no POIs last
-            filtered_df.sort_values(by="DISTANCE (km)", inplace=True, na_position="last")
+            property_df.sort_values(by="DISTANCE (km)", inplace=True, na_position="last")
 
-            print(filtered_df.head())
-            print("Built full POI lists and sorted by nearest POI.\n\n")
+#             print(property_df.head())
+#             print("Built full POI lists and sorted by nearest POI.\n\n")
 
         # Filter by minimum distance if specified
         if max_distance > 0:
-            filtered_df = filtered_df[filtered_df["DISTANCE (km)"] <= max_distance]
-            print(filtered_df.head())
-            print("Filtered by maximum distance of {} km.\n\n".format(max_distance))
+            property_df = property_df[property_df["DISTANCE (km)"] <= max_distance]
+#             print(property_df.head())
+#             print("Filtered by maximum distance of {} km.\n\n".format(max_distance))
         
-        # Format distance column for display
-        filtered_df["DISTANCE (km)"] = filtered_df["DISTANCE (km)"].map(lambda v: f"{v:.2f}" if pd.notnull(v) else "")
+        # Format distance column for display, trimming each value to 2 decimal places
+        property_df["DISTANCE (km)"] = property_df["DISTANCE (km)"].map(lambda v: f"{v:.2f}" if pd.notnull(v) else "")
 
 
 
     ### STEP 5: Filter down to 20 ###
-    if len(filtered_df.index) > 20:
-        filtered_df = filtered_df.head(20) #/// Should I be ordering the places in any particular way?
+    if len(property_df.index) > 20:
+        property_df = property_df.head(20) #/// Should I be ordering the places in any particular way?
 
 
     
     ### STEP 6: Tidy up data before returning ###
     # Drop columns not needed in output, and rename RATING column
-    filtered_df.drop(columns=["GIATA ID", "LATITUDE", "LONGITUDE", "ACCURACY", "CHAINS", "PRIMARY_PROPERTY_TYPE", "Unnamed: 12", "Include / Exclude Ind", "Searchable Property Type"],
-                     inplace=True,
+    property_df = property_df.drop(columns=["GIATA ID", "LATITUDE", "LONGITUDE", "ACCURACY", "CHAINS", "PRIMARY_PROPERTY_TYPE", "Unnamed: 12", "Include / Exclude Ind", "Searchable Property Type"],
                      errors='ignore')
-    filtered_df.rename(columns={"DEFAULT_RATING": "RATING"}, inplace=True)
-    return filtered_df, ""
+    property_df = property_df.rename(columns={"DEFAULT_RATING": "RATING"})
+    return property_df, ""
 
 
 
