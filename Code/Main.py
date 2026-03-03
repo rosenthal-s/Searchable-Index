@@ -47,8 +47,6 @@ def search_hits(location_name, is_place, is_poi):
     try:
         place_hits_df = None
         poi_hits_df   = None
-        place_inexact = False
-        poi_inexact   = False
 
         # Page through /places/ to find relevant matches.
         if is_place:
@@ -59,14 +57,10 @@ def search_hits(location_name, is_place, is_poi):
             place_data, error = get_property_data(LnP.places_url, place_params, session, False)
             if error:
                 return place_data, f"Error getting place data: {error}"
-
+            
             place_df = pd.DataFrame(place_data.values())
-            # First, check for exact matches, then partial matches if none found
-            place_hits_df = place_df[place_df["name_primary"].str.lower() == location_name.lower()].copy()
-            if place_hits_df.empty:
-                place_hits_df = place_df[place_df["name_primary"].str.contains(location_name, case=False, regex=False)]
-                place_inexact = True
 
+            place_hits_df = place_df[place_df["name_primary"].str.contains(location_name, case=False, regex=False)]
             place_hits_df["Type"] = "Place" # Add a column to identify these locations as places
             
 #             print("Place hits:\n{}\n".format(place_hits_df.to_string(index=False))) ###
@@ -87,12 +81,8 @@ def search_hits(location_name, is_place, is_poi):
                 return poi_data, f"Error getting POI data: {error}"
 
             poi_df = pd.DataFrame(poi_data)
-            # First, check for exact matches, then partial matches if none found
-            poi_hits_df = poi_df[poi_df["name_primary"].str.lower() == location_name.lower()]
-            if poi_hits_df.empty and (not is_place or place_inexact): # Only search for partial matches in POIs if we didn't find an exact match in places, to avoid overwhelming with irrelevant POI hits
-                poi_hits_df = poi_df[poi_df["name_primary"].str.contains(location_name, case=False, regex=False)]
-                poi_inexact = True
-
+            
+            poi_hits_df = poi_df[poi_df["name_primary"].str.contains(location_name, case=False, regex=False)]
             poi_hits_df = poi_hits_df.rename(columns={"id": "key"}) # Align with place_hits_df for easier concatenation later
             poi_hits_df["Type"] = "POI" # Add a column to identify these locations as POIs
 
@@ -103,14 +93,10 @@ def search_hits(location_name, is_place, is_poi):
 
 
         
-#         print("Place_inexact: {}, POI_inexact: {}\n".format(place_inexact, poi_inexact)) ###
-        if place_inexact and not poi_inexact: # Only inexact matches found for places, but exact matches found for POIs. Return only POI hits
-            return poi_hits_df, ""
-        else:
-            hits_df = pd.concat([place_hits_df, poi_hits_df], axis=0, ignore_index=True)
-            hits_df.fillna("", inplace=True) # Replace NaNs (for non-existent POI states) with empty strings for cleaner display
-#             print("Concatenated hits:\n{}\n".format(hits_df.to_string(index=False))) ###
-            return hits_df, ""
+        hits_df = pd.concat([place_hits_df, poi_hits_df], axis=0, ignore_index=True)
+        hits_df.fillna("", inplace=True) # Replace NaNs (for non-existent POI states) with empty strings for cleaner display
+        print("Concatenated hits:\n{}\n".format(hits_df.to_string(index=False))) ###
+        return hits_df, ""
     except Exception as e:
         return pd.DataFrame(), repr(e)
     finally:
