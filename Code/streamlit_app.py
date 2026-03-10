@@ -116,31 +116,28 @@ with st.container(key="output_container"):
         if st.button("Run", disabled=not location_name):
             with st.spinner("Running - this may take a while..."):
                 try:
-                    if location_name:
-                        location_hits, error_message = Main.search_hits(location_name, location_is_place, location_is_poi)
-                        print(error_message)
+                    location_hits, error_message = Main.search_hits(location_name, location_is_place, location_is_poi)
+                    print(error_message)
 
-                        # Build display labels
-                        options = [
-                            (
-                                row["key"],
-                                f"{row.get('name_primary','')} - {', '.join([p for p in (row.get('state',''), row.get('country_code','')) if p])}",
-                                row["Type"]
-                            )
-                            for _, row in location_hits.iterrows()
-                        ] if location_hits is not None and not location_hits.empty else []
+                    # Build display labels
+                    options = [
+                        (
+                            row["key"],
+                            f"{row.get('name_primary','')} - {', '.join([p for p in (row.get('state',''), row.get('country_code','')) if p])}",
+                            row["Type"]
+                        )
+                        for _, row in location_hits.iterrows()
+                    ] if location_hits is not None and not location_hits.empty else []
 
-                        if len(options) == 1:
-                            run_main(options[0][0], options[0][2])
-                        elif len(options) > 1:
-                            # Persist options and enter "awaiting confirmation" state
-                            st.session_state["candidate_options"] = options
-                            st.session_state["awaiting_confirmation"] = True
-                            st.rerun()
-                        else:
-                            run_main() # No matches, run without selected_key
+                    if len(options) == 1:
+                        run_main(options[0][0], options[0][2])
+                    elif len(options) > 1:
+                        # Persist options and enter "awaiting confirmation" state
+                        st.session_state["candidate_options"] = options
+                        st.session_state["awaiting_confirmation"] = True
+                        st.rerun()
                     else:
-                        run_main() # Empty place_name    
+                        run_main() # No matches, run without selected_key
                 except Exception as e:
                     st.exception(e)
 
