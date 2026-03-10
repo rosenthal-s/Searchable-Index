@@ -46,7 +46,7 @@ nearby_poi_options = [
     "", "Airport Terminal", "Beach", "Cruise", "Education", "Golf",
     "Healthcare", "Landmark", "Mine", "Rail", "Sport", "Venues"
 ]
-nearby_poi_type = st.selectbox("Nearby POI type", nearby_poi_options, index=0, disabled=location_is_poi).strip()
+nearby_poi_type = st.selectbox("Nearby POI type (only used when searching for a place)", nearby_poi_options, index=0, disabled=not location_is_place).strip()
 
 
 
