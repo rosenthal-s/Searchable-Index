@@ -86,7 +86,7 @@ def run_main(selected_key=None, location_type=None):
 
 
 if not (st.session_state.get("awaiting_confirmation") and st.session_state.get("candidate_options")):
-    if st.button("Run"):
+    if st.button("Run", disabled=not location_name):
         with st.spinner("Running - this may take a while..."):
             try:
                 if location_name:
