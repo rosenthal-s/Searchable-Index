@@ -65,7 +65,7 @@ def run_main(selected_key=None, location_type=None):
         required_keywords,
         float(min_rating),
         float(max_distance),
-        nearby_poi_type if not location_is_poi else "",
+        nearby_poi_type if location_is_place else "",
         selected_key
     )
     if message:
