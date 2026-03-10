@@ -1,5 +1,7 @@
 import pandas as pd
 import streamlit as st
+import streamlit.components.v1 as components
+import folium
 import Main
 
 
@@ -14,6 +16,10 @@ css = """
 .st-key-output_container, .st-key-output_container_2 {
     background-color: rgba(79, 126, 203, 1);
     padding: 30px;
+}
+.stDownloadButton {
+    margin-top: -20px !important;
+    margin-bottom: 3.75px !important;
 }
 """
 
@@ -100,13 +106,28 @@ with st.container(key="output_container"):
         else:
             if df is not None and not df.empty:
                 st.markdown("<h5 style='background-color: rgba(154, 185, 90, 1); color: green; padding: 10.5px 10px 10px 12.5px; margin-top: 10px; margin-bottom: 5px;'>Finished - results below:</h5>", unsafe_allow_html=True)
-                st.dataframe(df)
+
+                st.dataframe(df.drop(columns=['LATITUDE', 'LONGITUDE']))
                 st.download_button(
                     "Download CSV",
                     data=df.to_csv(index=False).encode("utf-8-sig"),
                     file_name=f"{location_name} Properties.csv",
                     mime="text/csv"
                 )
+                
+                # Create interactive map with folium
+                centre_latitude = df['LATITUDE'].mean()
+                centre_longitude = df['LONGITUDE'].mean()
+                folium_map = folium.Map(location=[centre_latitude, centre_longitude], zoom_start=10, width='100%', height='500px')
+                
+                for _, row in df.iterrows():
+                    popup_text = f"<b>{row['NAME']}</b><br>{row['CITY']}, {row['COUNTRY']}<br>Rating: {row['RATING']}"
+                    folium.Marker(
+                        location=[row['LATITUDE'], row['LONGITUDE']],
+                        popup=popup_text
+                    ).add_to(folium_map)
+                
+                components.html(folium_map._repr_html_(), height=507.5)
             else:
                 st.warning("Finished but no results were returned.")
 

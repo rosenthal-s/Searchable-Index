@@ -202,7 +202,7 @@ def main(location_name, location_is_poi, searchable_type, required_keywords = se
 #                     print("Found POI '{}' (ID: {}) at lat {}, lon {}".format(row["name_primary"], poi_id, poi_latitude, poi_longitude))
 #                 print("\n")
                 
-    else:
+    else: # location_is_poi
         # When selected_key is provided, skip searching by name as we already know what poi to use
         if selected_key:
 #             print("Using provided POI key: {}\n\n".format(selected_key)) #/// Test print
@@ -528,7 +528,7 @@ def main(location_name, location_is_poi, searchable_type, required_keywords = se
     
     ### STEP 6: Tidy up data before returning ###
     # Drop columns not needed in output, and rename RATING column
-    property_df = property_df.drop(columns=["GIATA ID", "LATITUDE", "LONGITUDE", "ACCURACY", "CHAINS", "PRIMARY_PROPERTY_TYPE", "Unnamed: 12", "Include / Exclude Ind", "Searchable Property Type"],
+    property_df = property_df.drop(columns=["GIATA ID", "ACCURACY", "CHAINS", "PRIMARY_PROPERTY_TYPE", "Unnamed: 12", "Include / Exclude Ind", "Searchable Property Type"],
                      errors='ignore')
     property_df = property_df.rename(columns={"DEFAULT_RATING": "RATING"})
     return property_df, ""
