@@ -90,7 +90,7 @@ if not (st.session_state.get("awaiting_confirmation") and st.session_state.get("
         with st.spinner("Running - this may take a while..."):
             try:
                 if location_name:
-                    place_hits, error_message = Main.search_hits(location_name, location_is_place, location_is_poi)
+                    location_hits, error_message = Main.search_hits(location_name, location_is_place, location_is_poi)
                     print(error_message)
 
                     # Build display labels
@@ -100,8 +100,8 @@ if not (st.session_state.get("awaiting_confirmation") and st.session_state.get("
                             f"{row.get('name_primary','')} - {', '.join([p for p in (row.get('state',''), row.get('country_code','')) if p])}",
                             row["Type"]
                         )
-                        for _, row in place_hits.iterrows()
-                    ] if not place_hits.empty else []
+                        for _, row in location_hits.iterrows()
+                    ] if location_hits is not None and not location_hits.empty else []
 
                     if len(options) == 1:
                         run_main(options[0][0], options[0][2])
