@@ -85,13 +85,13 @@ with st.container(key="input_container"):
 ### RUNNING AND OUTPUT ###
 
 with st.container(key="output_container"):
-    def run_main(selected_key=None, location_type=None):
+    def run_main(selected_key=None, selected_name=None, location_type=None):
         if location_type:
             is_poi = location_type == "POI"
         else:
             is_poi = location_is_poi
 
-        df, message = Main.main(
+        df, message, poi_info = Main.main(
             location_name,
             is_poi,
             searchable_type.strip().upper() if searchable_type else "",
@@ -121,11 +121,19 @@ with st.container(key="output_container"):
                 folium_map = folium.Map(location=[centre_latitude, centre_longitude], zoom_start=10, width='100%', height='500px')
                 
                 for _, row in df.iterrows():
-                    popup_text = f"<b>{row['NAME']}</b><br>{row['CITY']}, {row['COUNTRY']}<br>Rating: {row['RATING']}"
+                    popup_text = f"<b>{row['NAME']}</b><br>{row['CITY']}, {row['COUNTRY']}.<br>Rating: {row['RATING']}"
                     folium.Marker(
                         location=[row['LATITUDE'], row['LONGITUDE']],
                         popup=popup_text,
                         icon=folium.Icon(color='red', icon='hotel', prefix='fa')
+                    ).add_to(folium_map)
+
+                for row in poi_info:
+                    poi_name = selected_name if location_type == "POI" else row['name']
+                    popup_text = f"<b>{poi_name}</b>"
+                    folium.Marker(
+                        location=[float(row['lat']), float(row['lon'])],
+                        popup=popup_text
                     ).add_to(folium_map)
                 
                 components.html(folium_map._repr_html_(), height=507.5)
@@ -146,13 +154,14 @@ with st.container(key="output_container"):
                         (
                             row["key"],
                             f"{row.get('name_primary','')} - {', '.join([p for p in (row.get('state',''), row.get('country_code','')) if p])}",
+                            row["name_primary"],
                             row["Type"]
                         )
                         for _, row in location_hits.iterrows()
                     ] if location_hits is not None and not location_hits.empty else []
 
                     if len(options) == 1:
-                        run_main(options[0][0], options[0][2])
+                        run_main(selected_key=options[0][0], selected_name=options[0][2], location_type=options[0][3])
                     elif len(options) > 1:
                         # Persist options and enter "awaiting confirmation" state
                         st.session_state["candidate_options"] = options
@@ -166,7 +175,7 @@ with st.container(key="output_container"):
     # Render candidate-selection UI outside the Run branch so it survives reruns
     else:
         options = st.session_state["candidate_options"]
-        labels = [label for _, label, _ in options]
+        labels = [label for _, label, _, _ in options]
         st.selectbox(
             "Multiple matches found - pick one",
             list(range(len(labels))),
@@ -176,10 +185,8 @@ with st.container(key="output_container"):
         if st.button("Confirm Location and Run"):
             with st.spinner("Running - this may take a while..."):
                 idx = st.session_state.get("candidate_choice_idx", 0)
-                print(f"\n\nUser selected option index: {idx}\nUser selected key: {options[idx][0]}\nLocation type: {options[idx][2]}\n\n")
-                selected_key = options[idx][0]
-                location_type = options[idx][2]
-                run_main(selected_key, location_type)
+                print(f"\n\nUser selected option index: {idx}\nUser selected key: {options[idx][0]}\nLocation name: {options[idx][2]}\nLocation type: {options[idx][3]}\n\n")
+                run_main(selected_key=options[idx][0], selected_name=options[idx][2], location_type=options[idx][3])
 
 
 

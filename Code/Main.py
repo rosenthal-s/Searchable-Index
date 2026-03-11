@@ -131,7 +131,7 @@ def main(location_name, location_is_poi, searchable_type, required_keywords = se
             # Perform authenticated request
             place_data, message = get_property_data(url=LnP.get_place_url(selected_key), params=place_params, session=session, location_is_poi=False)
             if not place_data:
-                return None, message
+                return None, message, None
 
             # Get TTICodes
             for property_code in place_data[selected_key].get("tticodes", []):
@@ -144,7 +144,7 @@ def main(location_name, location_is_poi, searchable_type, required_keywords = se
             }
             place_data, message = get_property_data(url=LnP.places_url, params=place_params, session=session, location_is_poi=False)
             if not place_data:
-                return None, message
+                return None, message, None
 
             place_df = pd.DataFrame(place_data.values())
             # First, check for exact match, then partial match if none found
@@ -160,7 +160,7 @@ def main(location_name, location_is_poi, searchable_type, required_keywords = se
             selected_key = hits_df.iloc[0]["key"] if not hits_df.empty else None
 
         if len(property_codes) == 0:
-            return None, "Place not found."
+            return None, "Place not found.", None
         
         # Now search for POIs of the given type within this place, if applicable
         if nearby_poi_type:
@@ -171,9 +171,7 @@ def main(location_name, location_is_poi, searchable_type, required_keywords = se
             }
             poi_data, message = get_property_data(url=LnP.pois_url, params=poi_params, session=session, location_is_poi=True)
             if not poi_data:
-                if message == "No data found.":
-                    return None, "No nearby POIs found within place '{}'.".format(location_name)
-                return None, message
+                return None, message if message != "No data found." else "No nearby POIs found within place '{}'.".format(location_name), None
 
             poi_df = pd.DataFrame(poi_data)
             # Ensure POI id types align, merge local POI metadata (has 'POIS ID' and 'POIS Type')
@@ -192,7 +190,7 @@ def main(location_name, location_is_poi, searchable_type, required_keywords = se
             ]
 
             if poi_hits_df.empty:
-                return None, "No nearby POIs of type '{}' found within place '{}'.".format(nearby_poi_type, location_name)
+                return None, "No nearby POIs of type '{}' found within place '{}'.".format(nearby_poi_type, location_name), None
 #             else:
 #                 #/// Test print of all found POIs
 #                 for _, row in poi_hits_df.iterrows():
@@ -215,7 +213,7 @@ def main(location_name, location_is_poi, searchable_type, required_keywords = se
 
             raw_poi_data, message = get_property_data(url=poi_url, params=poi_params, session=session, location_is_poi=True)
             if not raw_poi_data:
-                return None, message
+                return None, message, None
             poi_data = raw_poi_data[0]
 
             poi_id = poi_data["id"]
@@ -247,7 +245,7 @@ def main(location_name, location_is_poi, searchable_type, required_keywords = se
             }
             poi_data, message = get_property_data(url=LnP.pois_url, params=poi_params, session=session, location_is_poi=True)
             if not poi_data:
-                return None, message
+                return None, message, None
 
             poi_df = pd.DataFrame(poi_data)
             # First, check for exact match, then partial match if none found
@@ -280,7 +278,7 @@ def main(location_name, location_is_poi, searchable_type, required_keywords = se
                             property_codes.add(int(property_code))
 
         if len(property_codes) == 0:
-            return None, "POI not found."
+            return None, "POI not found.", None
 #         print("Property codes: {}\n\n".format(property_codes))
     
     session.close()
@@ -323,7 +321,7 @@ def main(location_name, location_is_poi, searchable_type, required_keywords = se
 #         print(property_df.head())
 #         print("Filtered length: {}\n\n".format(len(property_df.index)))
     else:
-        return None, "Property data import failed."
+        return None, "Property data import failed.", None
     
 
 
@@ -445,6 +443,9 @@ def main(location_name, location_is_poi, searchable_type, required_keywords = se
 
 #             print(property_df.head())
 #             print("Sorted by distance to POI.\n\n")
+
+            # For map display later, return the POI info as a dictionary with latitude and longitude
+            poi_info = [{"lat": poi_latitude, "lon": poi_longitude}]
         else: # nearby_poi_type
             # Get list of POIs of the given type within the selected place
             poi_info = []
@@ -462,7 +463,7 @@ def main(location_name, location_is_poi, searchable_type, required_keywords = se
                 else:
                     lat = float(row["lat"])
                     lon = float(row["lon"])
-                poi_info.append({"id": poi_id, "name": poi_name, "lat": lat, "lon": lon})
+                poi_info.append({"name": poi_name, "lat": lat, "lon": lon})
 
             poi_lists = []
             closest_poi_names = []
@@ -531,7 +532,7 @@ def main(location_name, location_is_poi, searchable_type, required_keywords = se
     property_df = property_df.drop(columns=["GIATA ID", "ACCURACY", "CHAINS", "PRIMARY_PROPERTY_TYPE", "Unnamed: 12", "Include / Exclude Ind", "Searchable Property Type"],
                      errors='ignore')
     property_df = property_df.rename(columns={"DEFAULT_RATING": "RATING"})
-    return property_df, ""
+    return property_df, "", poi_info if (location_is_poi or nearby_poi_type) else None
 
 
 
@@ -555,7 +556,7 @@ if __name__ == "__main__":
     selected_key = None
     # selected_key = "aaa3a48f4dee7334dc4b8f8038d61231" # Provide a specific place key to skip searching by name, or None to search by name. Only works for places, not POIs
     
-    df, message = main(place_name, place_is_poi, searchable_type, required_keywords, min_rating, max_distance, nearby_poi_type, selected_key)
+    df, message, _ = main(place_name, place_is_poi, searchable_type, required_keywords, min_rating, max_distance, nearby_poi_type, selected_key)
     if not message:
         # Save to CSV
         df.to_csv(os.path.join(os.path.dirname(os.path.dirname(__file__)), "Output", "{} Properties.csv".format(place_name)), index=False, encoding="utf-8-sig")
