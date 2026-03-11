@@ -124,7 +124,8 @@ with st.container(key="output_container"):
                     popup_text = f"<b>{row['NAME']}</b><br>{row['CITY']}, {row['COUNTRY']}<br>Rating: {row['RATING']}"
                     folium.Marker(
                         location=[row['LATITUDE'], row['LONGITUDE']],
-                        popup=popup_text
+                        popup=popup_text,
+                        icon=folium.Icon(color='red', icon='hotel', prefix='fa')
                     ).add_to(folium_map)
                 
                 components.html(folium_map._repr_html_(), height=507.5)
