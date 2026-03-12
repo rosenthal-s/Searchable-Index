@@ -216,7 +216,7 @@ def main(location_name, location_is_poi, searchable_type, required_keywords = se
                 return None, message, None
             poi_data = raw_poi_data[0]
 
-            poi_id = poi_data["id"]
+            poi_id = int(poi_data["id"])
             poi_latitude = float(poi_data["lat"])
             poi_longitude = float(poi_data["lon"])
 
@@ -254,7 +254,7 @@ def main(location_name, location_is_poi, searchable_type, required_keywords = se
                 hits_df = poi_df[poi_df["name_primary"].str.contains(location_name, case=False, regex=False)]
 
             if not hits_df.empty:
-                poi_id = float(hits_df.iloc[0]["id"])
+                poi_id = int(hits_df.iloc[0]["id"])
                 poi_latitude = float(hits_df.iloc[0]["lat"])
                 poi_longitude = float(hits_df.iloc[0]["lon"])
 #                 print("Found POI '{}'".format(hits_df.iloc[0]["name_primary"])) #/// Test print
