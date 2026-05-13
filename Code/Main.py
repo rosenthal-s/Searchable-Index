@@ -532,7 +532,7 @@ def main(location_name, location_is_poi, searchable_type, required_keywords = se
     property_df = property_df.drop(columns=["GIATA ID", "ACCURACY", "CHAINS", "PRIMARY_PROPERTY_TYPE", "Unnamed: 12", "Include / Exclude Ind", "Searchable Property Type"],
                      errors='ignore')
     property_df = property_df.rename(columns={"DEFAULT_RATING": "RATING"})
-    return property_df, "", poi_info if (location_is_poi or nearby_poi_type) else None
+    return property_df, "", poi_info if (location_is_poi or nearby_poi_type) else []
 
 
 
