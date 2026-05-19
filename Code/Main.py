@@ -354,6 +354,13 @@ def main(location_name, location_is_poi, searchable_type, required_keywords = se
     giata_ids = [int(x) for x in property_df["GIATA ID"].tolist()]
     ids_to_fetch = [gid for gid in giata_ids if gid not in facts_cache]
 
+    # Get a list of GIATA IDs for boutique properties, to ensure they are included regardless of their facts
+    try:
+        boutique_directory = pd.read_excel(LnP.boutique_directory_xlsx_path, sheet_name="Hotels", usecols=[1], engine="openpyxl")["GIATA Id"].dropna().astype(int).tolist()
+    except Exception as e:
+        print("Error loading boutique directory, proceeding without boutique info: {}".format(repr(e)))
+        boutique_directory = []
+
     # Prepare session with retries
     session_f = requests.Session()
     retries = Retry(total=3, backoff_factor=0.5, status_forcelist=(429, 500, 502, 503, 504))
@@ -365,12 +372,20 @@ def main(location_name, location_is_poi, searchable_type, required_keywords = se
             resp = session_f.get(url, auth=(LnP.giata_username, LnP.giata_password), timeout=15)
             if not resp.ok:
                 return gid, set()
+            
             root = ET.fromstring(resp.content)
             fact_ids = [fact.attrib["id"] for fact in root.findall(".//fact") if "id" in fact.attrib]
+            
+            # Create a set of all keywords associated with this GIATA ID by looking up each FACT ID in the fact_keywords mapping
             keywords = set()
             for fid in fact_ids:
                 if fid in fact_keywords:
                     keywords |= fact_keywords[fid]
+
+            # Ensure all boutique properties are included by adding a "BOUTIQUE" keyword for any GIATA ID found in the boutique directory
+            if gid in boutique_directory:
+                keywords.add("BOUTIQUE")
+
             return gid, keywords
         except Exception:
             return gid, set()
