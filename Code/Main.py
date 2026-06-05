@@ -62,8 +62,6 @@ def search_hits(location_name, is_place, is_poi):
 
             place_hits_df = place_df[place_df["name_primary"].str.contains(location_name, case=False, regex=False)]
             place_hits_df["Type"] = "Place" # Add a column to identify these locations as places
-            
-#             print("Place hits:\n{}\n".format(place_hits_df.to_string(index=False))) ###
 
             if not is_poi:
                 return place_hits_df, ""
@@ -85,8 +83,6 @@ def search_hits(location_name, is_place, is_poi):
             poi_hits_df = poi_df[poi_df["name_primary"].str.contains(location_name, case=False, regex=False)]
             poi_hits_df = poi_hits_df.rename(columns={"id": "key"}) # Align with place_hits_df for easier concatenation later
             poi_hits_df["Type"] = "POI" # Add a column to identify these locations as POIs
-
-#             print("POI hits:\n{}\n".format(poi_hits_df.to_string(index=False))) ###
 
             if not is_place:
                 return poi_hits_df, ""
