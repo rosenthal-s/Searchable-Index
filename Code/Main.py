@@ -262,7 +262,6 @@ def main(location_name, location_is_poi, searchable_type, required_keywords = se
 
         if len(property_codes) == 0:
             return None, "POI not found.", None
-#         print("Property codes: {}\n\n".format(property_codes))
     
     session.close()
 
@@ -292,7 +291,6 @@ def main(location_name, location_is_poi, searchable_type, required_keywords = se
         properties_a_k_df = pd.read_excel(LnP.property_info_xlsx_path, sheet_name="CNTRIES A_K", engine="openpyxl")
         properties_l_z_df = pd.read_excel(LnP.property_info_xlsx_path, sheet_name="CNTRIES L_Z", engine="openpyxl")
         property_df = pd.concat([properties_a_k_df, properties_l_z_df], axis=0)
-#     print("Property DataFrame length: {}\n".format(len(property_df.index)))
 
     # Get info for each property
     if "TTICODE" in property_df.columns:
@@ -301,8 +299,6 @@ def main(location_name, location_is_poi, searchable_type, required_keywords = se
             (property_df["TTICODE"].isin(property_codes)) &
             (property_df["DEFAULT_RATING"].fillna(0) >= min_rating)
         ]
-#         print(property_df.head())
-#         print("Filtered length: {}\n\n".format(len(property_df.index)))
     else:
         return None, "Property data import failed.", None
     
@@ -403,7 +399,6 @@ def main(location_name, location_is_poi, searchable_type, required_keywords = se
     # Filter out rows that don't match all required keywords
     if len(required_keywords) > 0:
         property_df = property_df[mask].reset_index(drop=True)
-#         print("DF filtered by facts:\n{}\n\n".format(property_df))
 
 
 
@@ -427,20 +422,12 @@ def main(location_name, location_is_poi, searchable_type, required_keywords = se
                 not math.isnan(poi_info_df[poi_info_df["POIS ID"] == poi_id].iloc[0]["Actual Lat"]) and
                 not math.isnan(poi_info_df[poi_info_df["POIS ID"] == poi_id].iloc[0]["Actual Lon"])
             ):
-#                 print("Using verified POI lat/long.")
-#                 print("Old lat/long: {}, {}".format(poi_latitude, poi_longitude))
                 poi_latitude = poi_info_df[poi_info_df["POIS ID"] == poi_id].iloc[0]["Actual Lat"]
                 poi_longitude = poi_info_df[poi_info_df["POIS ID"] == poi_id].iloc[0]["Actual Lon"]
-#                 print("New lat/long: {}, {}\n\n".format(poi_latitude, poi_longitude))
-#             else:
-#                 print("Using POI lat/long from API.\n\n")
 
             # Apply distance calculation
             property_df["DISTANCE (km)"] = property_df.apply(lambda row: haversine(poi_latitude, poi_longitude, row["LATITUDE"], row["LONGITUDE"]), axis=1)
             property_df.sort_values(by="DISTANCE (km)", inplace=True)
-
-#             print(property_df.head())
-#             print("Sorted by distance to POI.\n\n")
 
             # For map display later, return the POI info as a dictionary with latitude and longitude
             poi_info = [{"lat": poi_latitude, "lon": poi_longitude}]
@@ -505,14 +492,9 @@ def main(location_name, location_is_poi, searchable_type, required_keywords = se
             # Sort numerically by nearest distance, putting rows with no POIs last
             property_df.sort_values(by="DISTANCE (km)", inplace=True, na_position="last")
 
-#             print(property_df.head())
-#             print("Built full POI lists and sorted by nearest POI.\n\n")
-
         # Filter by minimum distance if specified
         if max_distance > 0:
             property_df = property_df[property_df["DISTANCE (km)"] <= max_distance]
-#             print(property_df.head())
-#             print("Filtered by maximum distance of {} km.\n\n".format(max_distance))
         
         # Format distance column for display, trimming each value to 2 decimal places
         property_df["DISTANCE (km)"] = property_df["DISTANCE (km)"].map(lambda v: f"{v:.2f}" if pd.notnull(v) else "")
