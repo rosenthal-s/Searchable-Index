@@ -91,7 +91,6 @@ def search_hits(location_name, is_place, is_poi):
         
         hits_df = pd.concat([place_hits_df, poi_hits_df], axis=0, ignore_index=True)
         hits_df.fillna("", inplace=True) # Replace NaNs (for non-existent POI states) with empty strings for cleaner display
-        print("Concatenated hits:\n{}\n".format(hits_df.to_string(index=False))) ###
         return hits_df, ""
     except Exception as e:
         return pd.DataFrame(), repr(e)
