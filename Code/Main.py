@@ -148,7 +148,6 @@ def main(location_name, location_is_poi, searchable_type, required_keywords = se
                 hits_df = place_df[place_df["name_primary"].str.contains(location_name, case=False, regex=False)]
 
             if not hits_df.empty:
-#                 print("Found place '{}'".format(hits_df.iloc[0]["name_primary"])) #/// Test print
                 for property_code in hits_df.iloc[0]["tticodes"]: #/// Should I look beyond the first entry?
                     property_codes.add(int(property_code))
 
@@ -159,7 +158,6 @@ def main(location_name, location_is_poi, searchable_type, required_keywords = se
         
         # Now search for POIs of the given type within this place, if applicable
         if nearby_poi_type:
-#             print("Searching for nearby POIs of type '{}'...".format(nearby_poi_type)) #/// Test print
             poi_params = {
                 "showcolumns": "id,name_primary,lat,lon,places",
                 # "format": "json", #/// Can't use JSON as it returns an object per line, not a list
@@ -186,19 +184,10 @@ def main(location_name, location_is_poi, searchable_type, required_keywords = se
 
             if poi_hits_df.empty:
                 return None, "No nearby POIs of type '{}' found within place '{}'.".format(nearby_poi_type, location_name), None
-#             else:
-#                 #/// Test print of all found POIs
-#                 for _, row in poi_hits_df.iterrows():
-#                     poi_id = int(row["id"])
-#                     poi_latitude = float(row["lat"])
-#                     poi_longitude = float(row["lon"])
-#                     print("Found POI '{}' (ID: {}) at lat {}, lon {}".format(row["name_primary"], poi_id, poi_latitude, poi_longitude))
-#                 print("\n")
                 
     else: # location_is_poi
         # When selected_key is provided, skip searching by name as we already know what poi to use
         if selected_key:
-#             print("Using provided POI key: {}\n\n".format(selected_key)) #/// Test print
             # Get TTI Codes for the selected key
             poi_url = LnP.get_poi_url(selected_key)
             poi_params = {
@@ -252,7 +241,6 @@ def main(location_name, location_is_poi, searchable_type, required_keywords = se
                 poi_id = int(hits_df.iloc[0]["id"])
                 poi_latitude = float(hits_df.iloc[0]["lat"])
                 poi_longitude = float(hits_df.iloc[0]["lon"])
-#                 print("Found POI '{}'".format(hits_df.iloc[0]["name_primary"])) #/// Test print
                 
                 # Get list of TTICodes for a given place
                 for parent_place in hits_df.iloc[0]["places"]:
