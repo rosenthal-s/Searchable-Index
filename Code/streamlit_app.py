@@ -102,7 +102,8 @@ with st.container(key="output_container"):
             selected_key
         )
         if message:
-            st.error(message)
+            st.error("Something went wrong - please try again.")
+            print(message)
         else:
             if df is not None and not df.empty:
                 st.markdown("<h5 style='background-color: rgba(154, 185, 90, 1); color: green; padding: 10.5px 10px 10px 12.5px; margin-top: 10px; margin-bottom: 5px;'>Finished - results below:</h5>", unsafe_allow_html=True)
@@ -170,7 +171,8 @@ with st.container(key="output_container"):
                     else:
                         run_main() # No matches, run without selected_key
                 except Exception as e:
-                    st.exception(e)
+                    st.error("Something went wrong - please try again.")
+                    print(repr(e))
 
     # Render candidate-selection UI outside the Run branch so it survives reruns
     else:
